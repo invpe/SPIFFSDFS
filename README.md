@@ -36,7 +36,7 @@ We will compile and run the server, then upload the sketch and run the DFS nodes
 
 0. Compile server
 
-`./compile.sh`
+`./build.sh`
 
 1. Start server
 
