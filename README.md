@@ -1,8 +1,9 @@
-# :dog2: SPIFFS as DFS Test
+# :dog2: SPIFFS as DFS Test :wink:
 
 This is a side template-project, where i implement a simple distributed file system on ESP32 nodes using their FLASH memory to store plain text files.
 
 - The networking is done over simple TCP implementation, where nodes connect to a server that keeps things working.
+- All things plain text for simplicity
 - The server is the authoritative node, ESP32's are dumb terminals. 
 - Files created are also stored in server memory for comparison across nodes.
 - Any mismatch in the hash of the files, server will push the file to the node to ensure it stats synched.
