@@ -82,7 +82,15 @@ void setup()
     SPIFFS.format();
     Serial.println("Failed to mount file system");
     delay(1000);
-  }  
+  }
+
+  // Carte Blanche on every start up
+  Serial.println("Formatting flash");
+  SPIFFS.format();
+
+  // Debug
+  listDir(SPIFFS, "/", 0);
+
   //
   Serial.println("Connecting to WiFi");
   WiFi.mode(WIFI_STA);
