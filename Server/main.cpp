@@ -33,7 +33,8 @@
 #define TRUE 1
 #define FALSE 0
 #define PORT 8888
-
+#define MAX_FILE_SIZE 2046
+#define MAX_READ_CHUNK 512
 #define FILE_MIN_LEN 3
 #define FILE_MAX_LEN 16
 #define MAX_NODES 10
@@ -138,13 +139,13 @@ struct tNode
 
 			// Read the incoming data
             int32_t     iBytesRead;
-            char        cBuffer[iCount]; 
+            char        cBuffer[MAX_READ_CHUNK]; 
             //
-            iBytesRead = (int)recv(m_Socket, (char *)cBuffer, CLIENT_MAX_BUFF, 0); 
-            if(cBuffer[0]=='R' && cBuffer[1]=='E'&&cBuffer[2]=='A'&&cBuffer[3]=='D')
-  			for(int x = 0; x < iBytesRead; x++)
+            iBytesRead = (int)recv(m_Socket, (char *)cBuffer, MAX_READ_CHUNK, 0); 
+            if(cBuffer[0]=='R' && cBuffer[1]=='E'&&cBuffer[2]=='A'&&cBuffer[3]=='D'&&cBuffer[4]==','&&cBuffer[5]=='O'&&cBuffer[6]=='K')
+  			for(int x = 0; x < iBytesRead-8; x++)
   			{
-  				printf("%c ", cBuffer[x]);
+  				printf("%c ", cBuffer[8+x]);
   			}
   			printf("\n");
 			return true;
@@ -196,6 +197,12 @@ tFile *GetFile(const std::string& rstrName)
 }
 bool WriteFile(const std::string& rstrName, const std::string& rstrData)
 {
+	// File size limit hit
+	if(rstrData.size()>MAX_FILE_SIZE)
+	{
+		return false;
+	}
+
 	tFile _New;
 	_New.m_strFile 	= rstrName;
 	_New.m_strData 	= rstrData;
@@ -231,22 +238,30 @@ bool AppendFile(const std::string& rstrName, const std::string& rstrData)
 	tFile *pFile = GetFile(rstrName);
 	if(pFile)
 	{
-		pFile->m_strData 	+= rstrData;
-		pFile->m_iSize 		+= rstrData.size();
-		MD5 m_MD5;
-		m_MD5.update(pFile->m_strData.c_str(), pFile->m_strData.size());
-		m_MD5.finalize();
-		pFile->m_strMD5 = m_MD5.toString();
-
-		for(int x = 0; x < MAX_NODES; x++)
+		// Max File Size Limit hit
+		if(pFile->m_iSize+rstrData.size()>MAX_FILE_SIZE)
 		{
-			if(Node[x].m_Socket  != 0)
-			{  
-				Node[x].AppendFile(rstrName,rstrData);
-			}
-		} 
 
-		return true;
+		}
+		else
+		{
+			pFile->m_strData 	+= rstrData;
+			pFile->m_iSize 		+= rstrData.size();
+			MD5 m_MD5;
+			m_MD5.update(pFile->m_strData.c_str(), pFile->m_strData.size());
+			m_MD5.finalize();
+			pFile->m_strMD5 = m_MD5.toString();
+
+			for(int x = 0; x < MAX_NODES; x++)
+			{
+				if(Node[x].m_Socket  != 0)
+				{  
+					Node[x].AppendFile(rstrName,rstrData);
+				}
+			} 
+
+			return true;
+		}
 	}
 	return false;
 }	
@@ -294,9 +309,9 @@ bool ReadFileB(const std::string&rstrName, const int& iPosition, const int& iCou
 			return false;
 		}
 
-		if(iCount>512)
+		if(iCount>MAX_READ_CHUNK)
 		{
-			printf("Count MAX\b");
+			printf("MAX_READ_CHUNK\n");
 			return false;
 		}
 
@@ -307,7 +322,6 @@ bool ReadFileB(const std::string&rstrName, const int& iPosition, const int& iCou
 			{ 
 				if(Node[x].MD5File(rstrName) == pFile->m_strMD5)
 				{ 
-
 					return Node[x].ReadFileB(rstrName,iPosition,iCount);
 				}	
 			}
@@ -317,7 +331,7 @@ bool ReadFileB(const std::string&rstrName, const int& iPosition, const int& iCou
 	printf("File does not exist\n");
 	return false;
 }
-bool ReadFile(const std::string&rstrName)
+bool ReadFile(const std::string&rstrName, std::string& rstrOutputString)
 {
 
 	tFile *pFile = GetFile(rstrName);
@@ -333,10 +347,8 @@ bool ReadFile(const std::string&rstrName)
 				{ 
 					printf("Getting file from node: %s\n", Node[x].GetIP().data());
 
-					std::string strReceivedData = Node[x].ReadFile(rstrName);
-					printf("-----------------\n");
-					printf("%s\n", strReceivedData.data());
-					printf("-----------------\n");
+					std::string strReceivedData = Node[x].ReadFile(rstrName); 
+					rstrOutputString = strReceivedData;
 					return true;
 				}	
 			}
@@ -481,7 +493,11 @@ void HandleConsole()
             	{
             		std::string strFilename = vCommand[1]; 
             		printf("Reading file '%s'\n", strFilename.data());
-            		ReadFile(strFilename);
+            		std::string strReadFile = "";
+            		ReadFile(strFilename,strReadFile);
+            		printf("--------------------\n");
+            		printf("%s\n",strReadFile.data());
+            		printf("--------------------\n");            		
             	}
             }
             // Read file bytes: <READB,file,position,count>
@@ -633,6 +649,7 @@ int main(int argc , char *argv[])
 					// Synchronize node on join
 					Synchronize(i);
 
+					// Tune the timeouts on this socket
 					struct timeval timeout;      
 				    timeout.tv_sec = 1;
 				    timeout.tv_usec = 0;
@@ -646,21 +663,16 @@ int main(int argc , char *argv[])
 
 					break;
 				}
-			}
-
-
+			}  
 		}
 			
 		//else its some IO operation on some other socket
 		for (i = 0; i < MAX_NODES; i++)
 		{  
-
-
 	        // This socket is set with Error descriptor, drop session
 	        if (FD_ISSET(Node[i].m_Socket , &errorfds))
 	        {
 	            printf("%s Terminated\n", Node[i].GetIP().data());
-					
 	        }
 
 	        // Disconnect
