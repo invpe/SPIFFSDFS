@@ -89,7 +89,23 @@ We will list files created and see where are they stored together with their MD5
 
 `Writing to file 'github' 14 bytes of data`
 
-4. Delete a file
+4. Read a file
+
+`READ,github`
+
+`Reading file 'github'`
+
+`Getting file from node: 192.168.1.115`
+
+`-----------------`
+
+`READ,OK,HELLO_WORLD__HELLO__ALL__`
+
+`-----------------`
+
+
+
+5. Delete a file
 
 `DELETE,github`
 
