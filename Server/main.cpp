@@ -346,7 +346,6 @@ bool ReadFile(const std::string&rstrName)
 	printf("File does not exist\n");
 	return false;
 } 
-
 // Helper
 std::vector<std::string> SplitString(const std::string &strData, char delim)
 {
@@ -363,7 +362,26 @@ std::vector<std::string> SplitString(const std::string &strData, char delim)
 	output.push_back(strData.substr(prev_pos, pos-prev_pos)); 
 	return output;
 }
-
+// Check MD5 match and if not, upload the proper version to ESP32
+void Synchronize(const int& riNodeID)
+{
+	for(int x = 0; x < m_vFiles.size(); x++)
+	{  
+		if(Node[riNodeID].m_Socket!=0)
+		{
+			bool bSynced = false; 
+			//
+			if(Node[riNodeID].MD5File(m_vFiles[x].m_strFile) == m_vFiles[x].m_strMD5)
+			{  
+			}					
+			else 
+			{
+				printf("Syncing %s\n", Node[riNodeID].GetIP().data());
+				Node[riNodeID].WriteFile(m_vFiles[x].m_strFile, m_vFiles[x].m_strData); 
+			}
+		}          		
+	}
+}
 // Primitive input from the console
 void HandleConsole()
 {
@@ -406,9 +424,8 @@ void HandleConsole()
 					{
 						if(Node[z].m_Socket!=0)
 						{
-							bool bSynced = false;
-
-							printf("-- %s@%s ",Node[z].GetIP().data(),Node[z].MD5File(m_vFiles[x].m_strFile).data(),bSynced);
+							//
+							printf("-- %s@%s ",Node[z].GetIP().data(),Node[z].MD5File(m_vFiles[x].m_strFile).data());
 
 							//
 							if(Node[z].MD5File(m_vFiles[x].m_strFile) == m_vFiles[x].m_strMD5)
@@ -416,15 +433,8 @@ void HandleConsole()
 								printf("(Checksum OK)\n");
 							}					
 							else 
-							{
-								// Replicate valid version 
-								int iRet = Node[z].WriteFile(m_vFiles[x].m_strFile, m_vFiles[x].m_strData);
-							
-								if(iRet==1)
-									printf("(Synced)\n");
-								else
-									printf("(Syncing)\n");
-
+							{ 
+								printf("(Sync)\n");
 							}
 						}
 					}            		
@@ -619,6 +629,10 @@ int main(int argc , char *argv[])
 				if( Node[i].m_Socket  == 0 )
 				{
 					Node[i].m_Socket  = new_socket;   
+
+					// Synchronize node on join
+					Synchronize(i);
+
 					struct timeval timeout;      
 				    timeout.tv_sec = 1;
 				    timeout.tv_usec = 0;
@@ -633,6 +647,8 @@ int main(int argc , char *argv[])
 					break;
 				}
 			}
+
+
 		}
 			
 		//else its some IO operation on some other socket
@@ -673,6 +689,7 @@ int main(int argc , char *argv[])
 						Node[i].m_Socket = 0;
 					}
 
+					// Mark ping
 					Node[i].m_iLastPing = time(0);
 				}
 			}
