@@ -123,6 +123,6 @@ Some further updates can be made and here are some ideas to keep you going.
 
 - Allow TCP clients to use the files over the network
 - Implement better replication (maybe chunks)
-- Sync with nodes that are connecting instead of waiting for `ls` 
+- ~~Sync with nodes that are connecting instead of waiting for `ls`~~ 
 - Implement bytes writing, reading (instead of plain text) 
 
