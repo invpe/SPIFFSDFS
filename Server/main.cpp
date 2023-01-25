@@ -685,8 +685,7 @@ int main(int argc , char *argv[])
 					printf("%s Disconnected\n", Node[i].GetIP().data()); 
 					close( Node[i].m_Socket );
 					Node[i].m_Socket = 0;
-				} 
-				else Node[i].m_iLastPing = time(0);
+				}  
 			}
 
 			// Ping
