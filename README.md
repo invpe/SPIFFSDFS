@@ -1,7 +1,17 @@
 # :dog2: SPIFFS as DFS Test
 
 This is a side template-project, where i implement a simple distributed file system on ESP32 nodes using their FLASH memory to store plain text files.
-The networking is done over simple TCP implementation, where nodes connect to a server that keeps things working.
+
+- The networking is done over simple TCP implementation, where nodes connect to a server that keeps things working.
+- The server is the authoritative node, ESP32's are dumb terminals. 
+- Files created are also stored in server memory for comparison across nodes.
+- Any mismatch in the hash of the files, server will push the file to the node to ensure it stats synched.
+- There is no persistence implemented, server when started has no memory of files created previously.
+- Nodes format FLASH on every boot. Persistence can be easily implemented if needed.
+- Basic replication implemented, where files are stored on all nodes.
+
+-----
+
 Following commands (provided on the server console) are available:
 
 - WRITE,FILENAME,DATA_PLAIN_TEXT
@@ -123,6 +133,7 @@ Some further updates can be made and here are some ideas to keep you going.
 
 - Allow TCP clients to use the files over the network
 - Implement better replication (maybe chunks)
+- Persist files
 - ~~Sync with nodes that are connecting instead of waiting for `ls`~~ 
 - Implement bytes writing, reading (instead of plain text) 
 
