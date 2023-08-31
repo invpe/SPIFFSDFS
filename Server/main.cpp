@@ -13,6 +13,8 @@
 	to handle bytes instead.
 
 	Zero security, zero intelligence - raw and pure.
+
+	!! SPIFFS can handle filenames up to 31 characters only
 */
 /************************************************/
 #include <stdio.h>
@@ -29,6 +31,7 @@
 #include <map> 			// __
 #include <sys/time.h> //FD_SET, FD_ISSET, FD_ZERO macros
 #include "md5.h"
+#include "sha1.hpp"
 
 #define TRUE 1
 #define FALSE 0
@@ -36,7 +39,7 @@
 #define MAX_FILE_SIZE 2046
 #define MAX_READ_CHUNK 512
 #define FILE_MIN_LEN 3
-#define FILE_MAX_LEN 16
+#define FILE_MAX_LEN 30
 #define MAX_NODES 10
 #define CLIENT_MAX_BUFF 1024
  
@@ -44,9 +47,26 @@
 struct tFile
 {
 	std::string m_strFile;
+	std::string m_strFilenameHash; // for ESP32 31 characters
 	std::string m_strData;
 	std::string m_strMD5;
 	int m_iSize;
+	uint32_t m_uiCreated;
+	uint32_t m_uiModified;	
+	std::string GetFilenameHash()
+	{	
+		SHA1 m_SHA1; 
+		m_SHA1.update(m_strFile); 
+		std::string strOut = m_SHA1.final();
+		std::string strHash = strOut.substr(0, FILE_MAX_LEN);
+		return strHash;
+	}
+	tFile()
+	{
+		m_iSize = 0;
+		m_uiCreated = 0;
+		m_uiModified = 0;
+	}
 };
 
 struct tNode
@@ -149,7 +169,7 @@ struct tNode
   			}
   			printf("\n");
 			return true;
-	}	
+	}	 
 	std::string MD5File(const std::string& rstrName)
 	{
 			std::string strReturn = "";
@@ -204,6 +224,7 @@ bool WriteFile(const std::string& rstrName, const std::string& rstrData)
 	}
 
 	tFile _New;
+	_New.m_uiCreated= time(0);
 	_New.m_strFile 	= rstrName;
 	_New.m_strData 	= rstrData;
 	_New.m_iSize 	= rstrData.size();
@@ -213,6 +234,7 @@ bool WriteFile(const std::string& rstrName, const std::string& rstrData)
 	m_MD5.finalize();
 	_New.m_strMD5 = m_MD5.toString(); 
 
+	// Exists, overwrite
 	tFile *pFile = GetFile(rstrName);
 	if(pFile)
 	{
@@ -228,7 +250,8 @@ bool WriteFile(const std::string& rstrName, const std::string& rstrData)
 	{
 		if(Node[x].m_Socket != 0)
 		{
-			Node[x].WriteFile(rstrName, rstrData);
+			//
+			Node[x].WriteFile(GetFile(rstrName)->GetFilenameHash(), rstrData);
 		}
 	}
 	return true;
@@ -245,6 +268,7 @@ bool AppendFile(const std::string& rstrName, const std::string& rstrData)
 		}
 		else
 		{
+			pFile->m_uiModified = time(0);
 			pFile->m_strData 	+= rstrData;
 			pFile->m_iSize 		+= rstrData.size();
 			MD5 m_MD5;
@@ -256,7 +280,7 @@ bool AppendFile(const std::string& rstrName, const std::string& rstrData)
 			{
 				if(Node[x].m_Socket  != 0)
 				{  
-					Node[x].AppendFile(rstrName,rstrData);
+					Node[x].AppendFile(pFile->GetFilenameHash(),rstrData);
 				}
 			} 
 
@@ -282,16 +306,18 @@ void DeleteFile(const std::string& rstrName)
 	{
 		if(m_vFiles[x].m_strFile == rstrName)
 		{
-			m_vFiles.erase(m_vFiles.begin() + x);
-
+			
 			// Replicate
 			for(int x = 0; x < MAX_NODES; x++)
 			{
 				if(Node[x].m_Socket  != 0)
 				{ 
-					Node[x].DeleteFile(rstrName);
+					Node[x].DeleteFile(m_vFiles[x].GetFilenameHash());
 				}
 			} 
+
+			m_vFiles.erase(m_vFiles.begin() + x);
+
 		}
 	}
 } 
@@ -320,9 +346,9 @@ bool ReadFileB(const std::string&rstrName, const int& iPosition, const int& iCou
 		{
 			if(Node[x].m_Socket  != 0)
 			{ 
-				if(Node[x].MD5File(rstrName) == pFile->m_strMD5)
+				if(Node[x].MD5File(pFile->GetFilenameHash()) == pFile->m_strMD5)
 				{ 
-					return Node[x].ReadFileB(rstrName,iPosition,iCount);
+					return Node[x].ReadFileB(pFile->GetFilenameHash(),iPosition,iCount);
 				}	
 			}
 		}
@@ -343,11 +369,11 @@ bool ReadFile(const std::string&rstrName, std::string& rstrOutputString)
 		{
 			if(Node[x].m_Socket  != 0)
 			{ 
-				if(Node[x].MD5File(rstrName) == pFile->m_strMD5)
+				if(Node[x].MD5File(pFile->GetFilenameHash()) == pFile->m_strMD5)
 				{ 
 					printf("Getting file from node: %s\n", Node[x].GetIP().data());
 
-					std::string strReceivedData = Node[x].ReadFile(rstrName); 
+					std::string strReceivedData = Node[x].ReadFile(pFile->GetFilenameHash()); 
 					rstrOutputString = strReceivedData;
 					return true;
 				}	
@@ -382,14 +408,15 @@ void Synchronize(const int& riNodeID)
 		if(Node[riNodeID].m_Socket!=0)
 		{
 			bool bSynced = false; 
+
 			//
-			if(Node[riNodeID].MD5File(m_vFiles[x].m_strFile) == m_vFiles[x].m_strMD5)
+			if(Node[riNodeID].MD5File(m_vFiles[x].GetFilenameHash()) == m_vFiles[x].m_strMD5)
 			{  
 			}					
 			else 
 			{
-				printf("Syncing %s\n", Node[riNodeID].GetIP().data());
-				Node[riNodeID].WriteFile(m_vFiles[x].m_strFile, m_vFiles[x].m_strData); 
+				printf("Syncing %s -> %s\n", Node[riNodeID].GetIP().data(), m_vFiles[x].m_strFile.data());
+				Node[riNodeID].WriteFile(m_vFiles[x].GetFilenameHash(), m_vFiles[x].m_strData); 
 			}
 		}          		
 	}
@@ -430,17 +457,18 @@ void HandleConsole()
             { 
             	for(int x = 0; x < m_vFiles.size(); x++)
             	{
-            		printf("- %s (%ib) %s\n", m_vFiles[x].m_strFile.data(), m_vFiles[x].m_iSize, m_vFiles[x].m_strMD5.data());
+            		printf("- %s (%ib) %s Created: %i Modified: %i\n", m_vFiles[x].m_strFile.data(), m_vFiles[x].m_iSize, m_vFiles[x].m_strMD5.data(),
+            			m_vFiles[x].m_uiCreated, m_vFiles[x].m_uiModified);
 
 					for(int z = 0; z < MAX_NODES;z++)
 					{
 						if(Node[z].m_Socket!=0)
 						{
 							//
-							printf("-- %s@%s ",Node[z].GetIP().data(),Node[z].MD5File(m_vFiles[x].m_strFile).data());
+							printf("-- %s@%s ",Node[z].GetIP().data(),m_vFiles[x].GetFilenameHash().data());
 
 							//
-							if(Node[z].MD5File(m_vFiles[x].m_strFile) == m_vFiles[x].m_strMD5)
+							if(Node[z].MD5File(m_vFiles[x].GetFilenameHash()) == m_vFiles[x].m_strMD5)
 							{ 
 								printf("(Checksum OK)\n");
 							}					
@@ -499,6 +527,19 @@ void HandleConsole()
             		printf("%s\n",strReadFile.data());
             		printf("--------------------\n");            		
             	}
+            }
+            // Synchronize all nodes
+            else if(vCommand[0]=="SYNCH")
+            {
+            	// Replicate to all nodes
+				for(int x = 0; x < MAX_NODES; x++)
+				{
+					if(Node[x].m_Socket != 0)
+					{
+						//						
+						Synchronize(x);
+					}
+				}
             }
             // Read file bytes: <READB,file,position,count>
             else if(vCommand[0]=="READB")
