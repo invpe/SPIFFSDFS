@@ -9,17 +9,16 @@
 ////////////////////////////////
 // Your WiFi Credentials here //
 ////////////////////////////////
-#define WIFI_SSID ""
-#define WIFI_PWD  ""
+#define WIFI_SSID "xxxxx"
+#define WIFI_PWD  "yyyyy"
 ////////////////////////////////////
 // Your DFServer Credentials here //
 ////////////////////////////////////
-#define DFS_SERVER "192.168.1.99"
+#define DFS_SERVER "192.168.1.192"
 #define DFS_PORT 8888
 ////////////////////////////////////
 WiFiClient m_Client;
 String m_strFilePrefix = "/";
-String m_strFilePostfix = ".dfs";
 uint32_t uiLastPing = 0;
 ////////////////////////////////////
 String GetMD5(const String& rstrFile)
@@ -88,12 +87,15 @@ void setup()
   Serial.println("Formatting flash");
   SPIFFS.format();
 
+  Serial.println("SPIFFS SIZE: "+String(SPIFFS.totalBytes() - SPIFFS.usedBytes()));
+  
   // Debug
   listDir(SPIFFS, "/", 0);
 
   //
   Serial.println("Connecting to WiFi");
   WiFi.mode(WIFI_STA);
+  WiFi.hostname("DFSNODE");
   WiFi.begin(WIFI_SSID, WIFI_PWD);
 
   // Give it 10 seconds to connect, otherwise rebootW
@@ -149,7 +151,7 @@ void loop()
 
       if (strJobType == "WRITE")
       {
-        String strFileName =  m_strFilePrefix + m_Client.readStringUntil(',') + m_strFilePostfix;
+        String strFileName =  m_strFilePrefix + m_Client.readStringUntil(',');
         String strFileData = m_Client.readStringUntil('\n');
         Serial.println("[DFS] File write request '" + strFileName + "'");
         File fFile = SPIFFS.open(strFileName, "w");
@@ -165,7 +167,7 @@ void loop()
 
       else if (strJobType == "APPEND")
       {
-        String strFileName = m_strFilePrefix + m_Client.readStringUntil(',') + m_strFilePostfix;
+        String strFileName = m_strFilePrefix + m_Client.readStringUntil(',');
         String strFileData = m_Client.readStringUntil('\n');
         Serial.println("[DFS] File append request '" + strFileName + "'");
         File fFile = SPIFFS.open(strFileName, "a");
@@ -180,7 +182,7 @@ void loop()
       }
       else if (strJobType == "SIZE")
       {
-        String strFileName = m_strFilePrefix + m_Client.readStringUntil('\n') + m_strFilePostfix;
+        String strFileName = m_strFilePrefix + m_Client.readStringUntil('\n');
         Serial.println("[DFS] File size request '" + strFileName + "'");
         File fFile = SPIFFS.open(strFileName, "r");
         Serial.println(fFile.size());
@@ -194,14 +196,14 @@ void loop()
       }
       else if (strJobType == "DELETE")
       {
-        String strFileName = m_strFilePrefix + m_Client.readStringUntil('\n') + m_strFilePostfix;
+        String strFileName = m_strFilePrefix + m_Client.readStringUntil('\n');
         Serial.println("[DFS] File delete request '" + strFileName + "'");
         SPIFFS.remove(strFileName);
         Send("DELETE,OK\n");
       }
       else if (strJobType == "MD5")
       {
-        String strFileName = m_strFilePrefix + m_Client.readStringUntil('\n') + m_strFilePostfix;
+        String strFileName = m_strFilePrefix + m_Client.readStringUntil('\n');
         Serial.println("[DFS] File MD5 request '" + strFileName + "'");
         Send("MD5," + GetMD5(strFileName) + "\n");
       }
@@ -213,7 +215,7 @@ void loop()
       }
       else if (strJobType == "READ")
       {
-        String strFileName = m_strFilePrefix + m_Client.readStringUntil('\n') + m_strFilePostfix;
+        String strFileName = m_strFilePrefix + m_Client.readStringUntil('\n');
         Serial.println("[DFS] File read request '" + strFileName + "'");
         File fFile = SPIFFS.open(strFileName);
         if (!fFile)
@@ -235,7 +237,7 @@ void loop()
         // All checks - server side
         int iLocation       = m_Client.readStringUntil(',').toInt();
         int iSize           = m_Client.readStringUntil(',').toInt();
-        String strFileName  = m_strFilePrefix + m_Client.readStringUntil('\n') + m_strFilePostfix;
+        String strFileName  = m_strFilePrefix + m_Client.readStringUntil('\n');
 
         Serial.println("[DFS] File readb request '" + strFileName + "' at " + String(iLocation) + " of " + String(iSize) + " bytes");
 
@@ -269,7 +271,8 @@ void loop()
       {
 
       }
-      //listDir(SPIFFS, "/", 0);
+      
+     // listDir(SPIFFS, "/", 0);
     }
   }
 }
